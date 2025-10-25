@@ -1,33 +1,60 @@
 import {
-    LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
-  } from "recharts";
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
+} from "recharts";
 
-  export default function MetricChart({ data, xKey = "time", yKey, unit, min, max }) {
-    const domain = [
-      typeof min === "number" ? min : "auto",
-      typeof max === "number" ? max : "auto",
-    ];
+export default function MetricChart({
+  data,
+  xKey = "time",
+  yKey,
+  unit,
+  min,
+  max,
+  color = "#2d6363",
+  showDots = false,
+}) {
+  const domain = [
+    typeof min === "number" ? min : "auto",
+    typeof max === "number" ? max : "auto",
+  ];
+
+  const dotProps = showDots ? { r: 3, fill: color } : false;
+  const activeDot = {
+    r: 6,
+    fill: "#d38129",
+    stroke: "#1d4036",
+    strokeWidth: 2,
+  };
+
   return (
-    <div style={{ width: "100%", height: 280, margin: "-10px auto" }}>
+    <div style={{ width: "100%", height: 260 }}>
       <ResponsiveContainer>
-        <LineChart data={data}>
+        <LineChart
+          data={data}
+          margin={{ top: 12, right: 12, left: 0, bottom: 6 }}
+        >
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey={xKey} tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} domain={domain} allowDataOverflow />
-          <Tooltip formatter={(v) => `${v} ${unit ?? ""}`} />
+          <XAxis dataKey={xKey} tick={{ fontSize: 12 }} tickMargin={8} />
+          <YAxis
+            tick={{ fontSize: 12 }}
+            domain={domain}
+            allowDataOverflow
+            width={48}
+          />
+          <Tooltip formatter={(v) => `${v ?? ""} ${unit ?? ""}`} />
           <Line
             type="monotone"
             dataKey={yKey}
-            stroke="#2d6363"                 // color de la línea
-            dot={{ r: 3, fill: "#2d6363" }}  // dots normales (si quieres mostrarlos)
-            activeDot={{
-                
-              r: 6,
-              fill: "#d38129",
-              stroke: "#1d4036",
-              strokeWidth: 2,
-              
-            }}
+            stroke={color}
+            strokeWidth={2}
+            dot={dotProps}
+            activeDot={activeDot}
+            isAnimationActive={false}
           />
         </LineChart>
       </ResponsiveContainer>
