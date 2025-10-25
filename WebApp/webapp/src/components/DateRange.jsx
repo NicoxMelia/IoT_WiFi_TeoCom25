@@ -118,6 +118,7 @@ export default function DateRange({
         <div>
           <label>Desde</label>
           <input
+            
             type="date"
             value={safeFrom ? fmt(safeFrom) : ""}
             inputMode="none"
@@ -143,7 +144,7 @@ export default function DateRange({
             onChange={handleToChange}
           />
         </div>
-        <div style={{ alignSelf: "end" }}>
+        <div>
           <button onClick={onApply}>Aplicar</button>
           {spanMsg ? (
             <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>{spanMsg}</div>
