@@ -38,17 +38,6 @@ body {
 .charts .card { padding: 12px 14px; }
 .charts .recharts-wrapper { min-height: 200px !important; }
 
-.chart-active-dot {
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: metric-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes metric-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.35); }
-}
-
 /* Table responsiveness */
 .table-card { margin-top: 16px; text-align: left; }
 .table-wrap { width: 100%; overflow-x: auto; }

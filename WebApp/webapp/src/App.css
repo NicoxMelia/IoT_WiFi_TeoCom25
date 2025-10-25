@@ -3,6 +3,13 @@
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
+  --bg: hsl(156, 24%, 35%);
+  --panel: #eff8f8;
+  --text: #eff8f8;
+  --greenFCEFyN: #9ca3af;
+  --accent: #2d6363;
+  --greenFCEFyN: #1d4036;
+  --yellowFCEFyN: #d38129;
 }
 
 .logo {
@@ -10,12 +17,6 @@
   padding: 1.5em;
   will-change: filter;
   transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #2C5F66);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #39808a);
 }
 
 @keyframes logo-spin {
