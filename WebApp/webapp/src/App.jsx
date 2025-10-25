@@ -154,13 +154,29 @@ export default function App() {
 
   <div className="row row-3 charts">
         <ChartCard title="Temperatura (°C)">
-          <MetricChart data={tempSeries} yKey="temp" unit="°C" />
+          <MetricChart
+            data={tempSeries}
+            yKey="temp"
+            unit="°C"
+            min={-15}
+            max={60}
+          />
         </ChartCard>
         <ChartCard title="Humedad (%)">
-          <MetricChart data={humSeries} yKey="hum" unit="%" />
+          <MetricChart
+            data={humSeries}
+            yKey="hum"
+            unit="%"
+            min={0}
+            max={100}
+          />
         </ChartCard>
         <ChartCard title="Presión (hPa)">
-          <MetricChart data={pressSeries} yKey="press" unit="hPa" />
+          <MetricChart
+            data={pressSeries}
+            yKey="press"
+            unit="hPa"
+          />
         </ChartCard>
       </div>
 

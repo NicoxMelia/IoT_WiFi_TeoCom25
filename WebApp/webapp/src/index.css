@@ -7,12 +7,20 @@
   --accent: #2d6363;
   --greenFCEFyN: #1d4036;
   --yellowFCEFyN: #d38129;
+  width: 100%;
+  max-width: 1280px;  /* o el ancho que prefieras */
+  margin: 0 auto;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
   background: var(--bg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /*align-items: flex-start; /* o 'center' si querés vertical también */
+  min-height: 100vh;
   color: var(--greenFCEFyN);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
   overflow-x: hidden;
