@@ -32,11 +32,11 @@ export default function MetricChart({
   };
 
   return (
-    <div style={{ width: "100%", height: 260 }}>
+    <div style={{ width: "100%", height: 260, userSelect: "none" }}>
       <ResponsiveContainer>
         <LineChart
           data={data}
-          margin={{ top: 12, right: 12, left: 0, bottom: 6 }}
+          margin={{ top: 12, right: 12, left: -10, bottom: 6 }}
         >
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey={xKey} tick={{ fontSize: 12 }} tickMargin={8} />
@@ -44,9 +44,9 @@ export default function MetricChart({
             tick={{ fontSize: 12 }}
             domain={domain}
             allowDataOverflow
-            width={48}
+            width={42}
           />
-          <Tooltip formatter={(v) => `${v ?? ""} ${unit ?? ""}`} />
+          <Tooltip formatter={(v) => `${v ?? ""} ${unit ?? ""}`} cursor={false} />
           <Line
             type="monotone"
             dataKey={yKey}

@@ -1,15 +1,16 @@
 #root {
-  max-width: 1280px;
+  max-width: auto;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 0px;
   text-align: center;
+  color-scheme: light dark;
   --bg: hsl(156, 24%, 35%);
-  --panel: #eff8f8;
-  --text: #eff8f8;
-  --greenFCEFyN: #9ca3af;
-  --accent: #2d6363;
-  --greenFCEFyN: #1d4036;
-  --yellowFCEFyN: #d38129;
+  --panel: #EFE4D8;
+  --text: #EFE4D8;
+  --pinkFCEFyN: #D88E77;
+  --accent: #1D1D1D;
+  --greenFCEFyN: #1D4036;
+  --yellowFCEFyN: #D38129;
 }
 
 .logo {

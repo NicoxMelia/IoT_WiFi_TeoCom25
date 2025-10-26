@@ -8,6 +8,7 @@ import DateRange from "./components/DateRange";
 import ChartCard from "./components/ChartCard";
 import MetricChart from "./components/MetricChart";
 import "./App.css";
+import ornamental02 from "./assets/ornamentals/Elementos ornamentales-02recorte.png";
 
 // Fetch measurements from Firestore using optional date range.
 // This function will try common collection and field names used in the project
@@ -130,84 +131,75 @@ export default function App() {
   const pressSeries = data.map((r) => ({ time: r.time, press: r.press }));
 
   return (
-    <div className="container">
-      <Header />
-      <div className="row row-2">
-        <div>
-          <DateRange
-            from={range.from}
-            to={range.to}
-            onChange={(r) => setRange(r)}
-            onApply={onApply}
-          />
-        </div>
-        <div className="card">
-          <div className="section-title">Resumen</div>
+    <div className="page-background">
+      <img
+        src={ornamental02}
+        alt=""
+        className="page-background__image"
+        aria-hidden="true"
+        possition="top-right"
+      />
+      <div className="container">
+        <Header />
+        <div className="row row-2">
           <div>
-            <strong>Registros:</strong> {data.length}
-            <br />
-            {loading ? <em>Cargando...</em> : null}
-            {error ? <div style={{ color: "red" }}>{error}</div> : null}
+            <DateRange from={range.from} to={range.to} onChange={(r) => setRange(r)} onApply={onApply} />
+          </div>
+          <div className="card">
+            <div className="section-title">Resumen</div>
+            <div>
+              <strong>Registros:</strong> {data.length}
+              <br />
+              {loading ? <em>Cargando...</em> : null}
+              {error ? <div style={{ color: "red" }}>{error}</div> : null}
+            </div>
           </div>
         </div>
-      </div>
 
-  <div className="row row-3 charts">
-        <ChartCard title="Temperatura (°C)">
-          <MetricChart
-            data={tempSeries}
-            yKey="temp"
-            unit="°C"
-            min={-15}
-            max={60}
-          />
-        </ChartCard>
-        <ChartCard title="Humedad (%)">
-          <MetricChart
-            data={humSeries}
-            yKey="hum"
-            unit="%"
-            min={0}
-            max={100}
-          />
-        </ChartCard>
-        <ChartCard title="Presión (hPa)">
-          <MetricChart
-            data={pressSeries}
-            yKey="press"
-            unit="hPa"
-          />
-        </ChartCard>
-      </div>
+        <div className="row row-3 charts">
+          <ChartCard title="Temperatura (°C)">
+            <MetricChart data={tempSeries} yKey="temp" unit="°C" min={-15} max={60} />
+          </ChartCard>
+          <ChartCard title="Humedad (%)">
+            <MetricChart data={humSeries} yKey="hum" unit="%" min={0} max={100} />
+          </ChartCard>
+          <ChartCard title="Presión (hPa)">
+            <MetricChart data={pressSeries} yKey="press" unit="hPa" />
+          </ChartCard>
+        </div>
 
-  <div className="card table-card">
-        <div className="section-title">Últimos registros</div>
-        {data.length === 0 ? (
-          <div>No hay datos.</div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th style={{ textAlign: "right" }}>Temperatura</th>
-                  <th style={{ textAlign: "right" }}>Humedad</th>
-                  <th style={{ textAlign: "right" }}>Presión</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.slice().reverse().map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.time}</td>
-                    <td style={{ textAlign: "right" }}>{r.temp ?? "-"}</td>
-                    <td style={{ textAlign: "right" }}>{r.hum ?? "-"}</td>
-                    <td style={{ textAlign: "right" }}>{r.press ?? "-"}</td>
+        <div className="card table-card">
+          <div className="section-title">Últimos registros</div>
+          {data.length === 0 ? (
+            <div>No hay datos.</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th style={{ textAlign: "right" }}>Temperatura</th>
+                    <th style={{ textAlign: "right" }}>Humedad</th>
+                    <th style={{ textAlign: "right" }}>Presión</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {data
+                    .slice()
+                    .reverse()
+                    .map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.time}</td>
+                        <td style={{ textAlign: "right" }}>{r.temp ?? "-"}</td>
+                        <td style={{ textAlign: "right" }}>{r.hum ?? "-"}</td>
+                        <td style={{ textAlign: "right" }}>{r.press ?? "-"}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
