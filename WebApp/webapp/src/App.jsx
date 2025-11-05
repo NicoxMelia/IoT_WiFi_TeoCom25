@@ -1,7 +1,10 @@
-// src/App.jsx (solo esta parte)
+// src/App.jsx
 import React, { useEffect, useState, useCallback } from "react";
 import { db, ensureAnonymousSignIn } from "./services/firebase";
-import { collection, query, where, orderBy, getDocs, Timestamp, limit } from "firebase/firestore";
+import {
+  collection, query, where, orderBy, limit,
+  Timestamp, onSnapshot
+} from "firebase/firestore";
 
 import Header from "./components/Header";
 import DateRange from "./components/DateRange";
@@ -10,147 +13,135 @@ import MetricChart from "./components/MetricChart";
 import "./App.css";
 import ornamental02 from "./assets/ornamentals/Elementos ornamentales-02recorte.png";
 
-// Fetch measurements from Firestore using optional date range.
-// This function will try common collection and field names used in the project
-// and also in your Firestore (e.g. `lecturas_sensores` with `timestamp`, `temperatura`, ...).
-async function fetchData({ from, to, maxRows = 1000 } = {}) {
-  const candidateCollections = ["lecturas_sensores", "measurements"];
+// === Configurables según tu BBDD ===
+const COLLECTION = "lecturas_sensores";      // Cambiá si usás otro nombre
+const TS_FIELD   = "timestamp";               // Cambiá si tu campo tiempo es "ts" o "time"
+// Opcional: si tenés varios nodos y querés filtrar por dispositivo
+const DEVICE_FIELD = "id_dispositivo";       // Cambiá/quitá si no lo usás
+const DEVICE_ID    = undefined;              // p.ej. "esp32_nodemcu_01" o dejá undefined
 
-  for (const colName of candidateCollections) {
-    const colRef = collection(db, colName);
-    // sample the collection to detect if it exists and which fields are used
-    const sampleSnap = await getDocs(query(colRef, limit(1)));
-    if (sampleSnap.empty) continue;
+// Arma la query según rango y filtros
+function buildQuery({ from, to, maxRows = 1000 } = {}) {
+  const colRef = collection(db, COLLECTION);
+  const parts = [];
 
-    // detect timestamp field and measurement field names
-    const sampleData = sampleSnap.docs[0].data();
-    const tsField = sampleData.ts ? "ts" : sampleData.timestamp ? "timestamp" : sampleData.time ? "time" : null;
-    const tempField = sampleData.temperatura ? "temperatura" : sampleData.temp ? "temp" : null;
-    const humField = sampleData.humedad ? "humedad" : sampleData.hum ? "hum" : null;
-    const pressField = sampleData.presion ? "presion" : sampleData.press ? "press" : null;
-
-    // build query using detected tsField when available; otherwise just limit
-    let q;
-    const fromTs = from && tsField ? Timestamp.fromDate(new Date(from.setHours(0, 0, 0, 0))) : null;
-    const toTs = to && tsField ? Timestamp.fromDate(new Date(to.setHours(23, 59, 59, 999))) : null;
-
-    try {
-      if (tsField) {
-        if (fromTs && toTs) {
-          q = query(colRef, where(tsField, ">=", fromTs), where(tsField, "<=", toTs), orderBy(tsField), limit(maxRows));
-        } else if (fromTs) {
-          q = query(colRef, where(tsField, ">=", fromTs), orderBy(tsField), limit(maxRows));
-        } else if (toTs) {
-          q = query(colRef, where(tsField, "<=", toTs), orderBy(tsField), limit(maxRows));
-        } else {
-          q = query(colRef, orderBy(tsField), limit(maxRows));
-        }
-      } else {
-        q = query(colRef, limit(maxRows));
-      }
-
-      const snap = await getDocs(q);
-      const rows = snap.docs.map((d) => {
-        const data = d.data();
-        // normalize timestamp -> Date
-        let date = new Date();
-        if (tsField && data[tsField] && typeof data[tsField].toDate === "function") {
-          date = data[tsField].toDate();
-        } else if (data.timestamp && typeof data.timestamp.toDate === "function") {
-          date = data.timestamp.toDate();
-        } else if (data.ts && typeof data.ts.toDate === "function") {
-          date = data.ts.toDate();
-        } else if (data.timestamp && typeof data.timestamp === "string") {
-          date = new Date(data.timestamp);
-        }
-
-        return {
-          id: d.id,
-          time: date.toLocaleString(),
-          ts: date.getTime(),
-          temp: (tempField && data[tempField] !== undefined) ? data[tempField] : (data.temp ?? null),
-          hum: (humField && data[humField] !== undefined) ? data[humField] : (data.hum ?? null),
-          press: (pressField && data[pressField] !== undefined) ? data[pressField] : (data.press ?? null),
-        };
-      });
-
-      return rows;
-    } catch (err) {
-      // If query fails for this collection (e.g. requires index or orderBy on missing field), try next
-      console.warn(`fetchData: query on ${colName} failed:`, err);
-      continue;
-    }
+  if (from instanceof Date) {
+    const d0 = new Date(from); d0.setHours(0,0,0,0);
+    parts.push(where(TS_FIELD, ">=", Timestamp.fromDate(d0)));
+  }
+  if (to instanceof Date) {
+    const d1 = new Date(to); d1.setHours(23,59,59,999);
+    parts.push(where(TS_FIELD, "<=", Timestamp.fromDate(d1)));
+  }
+  if (DEVICE_ID) {
+    parts.push(where(DEVICE_FIELD, "==", DEVICE_ID));
   }
 
-  // no candidate collection had data
-  return [];
+  // Firestore requiere orderBy por el campo de rango
+  return query(colRef, orderBy(TS_FIELD, "asc"), ...parts, limit(maxRows));
 }
 
 export default function App() {
   const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [range, setRange] = useState({ from: null, to: null });
 
-  const load = useCallback(async ({ from, to } = {}) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const rows = await fetchData({ from, to, maxRows: 1000 });
-      setData(rows);
-    } catch (err) {
-      console.error(err);
-      setError(String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Si usás un botón "Aplicar", podés dejarlo vacío (el efecto ya re-suscribe por rango)
+  const onApply = useCallback(() => {}, []);
 
   useEffect(() => {
-    // initial load (recent data)
-    // If Firestore rules require auth, try anonymous sign-in first.
     let mounted = true;
+    let unsub = null;
+
     (async () => {
       try {
-        await ensureAnonymousSignIn();
+        setLoading(true);
+        setError(null);
+        try { await ensureAnonymousSignIn?.(); } catch (_) {}
+
+        const q = buildQuery({
+          from: range.from || undefined,
+          to: range.to || undefined,
+          maxRows: 1000,
+        });
+
+        // Cierra suscripción previa si existía
+        if (unsub) unsub();
+
+        // Suscripción en tiempo real
+        unsub = onSnapshot(
+          q,
+          (snap) => {
+            if (!mounted) return;
+            const rows = snap.docs.map((d) => {
+              const doc = d.data();
+
+              // Normalizar fecha
+              let date = new Date();
+              const tsVal = doc[TS_FIELD];
+              if (tsVal?.toDate) date = tsVal.toDate();
+              else if (typeof tsVal === "string") date = new Date(tsVal);
+
+              return {
+                id: d.id,
+                time: date.toLocaleString(),
+                ts: +date,
+                temp: doc.temperatura ?? doc.temp ?? null,
+                hum:  doc.humedad     ?? doc.hum  ?? null,
+                press:doc.presion     ?? doc.press?? null,
+              };
+            });
+            setData(rows);
+            setLoading(false);
+          },
+          (err) => {
+            if (!mounted) return;
+            console.error(err);
+            setError(String(err));
+            setLoading(false);
+          }
+        );
       } catch (err) {
-        // If anonymous sign-in fails, we'll still attempt load and surface the error
-        console.warn("Anonymous sign-in failed:", err);
+        if (!mounted) return;
+        console.error(err);
+        setError(String(err));
+        setLoading(false);
       }
-      if (mounted) load();
     })();
-    return () => { mounted = false; };
-  }, [load]);
 
-  function onApply() {
-    load(range);
-  }
+    return () => {
+      mounted = false;
+      if (unsub) unsub();
+    };
+  }, [range.from, range.to]);
 
-  const tempSeries = data.map((r) => ({ time: r.time, temp: r.temp }));
-  const humSeries = data.map((r) => ({ time: r.time, hum: r.hum }));
+  const tempSeries  = data.map((r) => ({ time: r.time, temp:  r.temp  }));
+  const humSeries   = data.map((r) => ({ time: r.time, hum:   r.hum   }));
   const pressSeries = data.map((r) => ({ time: r.time, press: r.press }));
 
   return (
     <div className="page-background">
-      <img
-        src={ornamental02}
-        alt=""
-        className="page-background__image"
-        aria-hidden="true"
-        possition="top-right"
-      />
+      <img src={ornamental02} alt="" className="page-background__image" aria-hidden="true" />
       <div className="container">
         <Header />
+
         <div className="row row-2">
           <div>
-            <DateRange from={range.from} to={range.to} onChange={(r) => setRange(r)} onApply={onApply} />
+            <DateRange
+              from={range.from}
+              to={range.to}
+              onChange={(r) => setRange(r)}
+              onApply={onApply}
+            />
           </div>
+
           <div className="card">
             <div className="section-title">Resumen</div>
             <div>
               <strong>Registros:</strong> {data.length}
               <br />
-              {loading ? <em>Cargando...</em> : null}
+              {loading ? <em>Cargando…</em> : null}
               {error ? <div style={{ color: "red" }}>{error}</div> : null}
             </div>
           </div>
@@ -184,22 +175,20 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data
-                    .slice()
-                    .reverse()
-                    .map((r) => (
-                      <tr key={r.id}>
-                        <td>{r.time}</td>
-                        <td style={{ textAlign: "right" }}>{r.temp ?? "-"}</td>
-                        <td style={{ textAlign: "right" }}>{r.hum ?? "-"}</td>
-                        <td style={{ textAlign: "right" }}>{r.press ?? "-"}</td>
-                      </tr>
-                    ))}
+                  {data.slice().reverse().map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.time}</td>
+                      <td style={{ textAlign: "right" }}>{r.temp  ?? "-"}</td>
+                      <td style={{ textAlign: "right" }}>{r.hum   ?? "-"}</td>
+                      <td style={{ textAlign: "right" }}>{r.press ?? "-"}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
         </div>
+
       </div>
     </div>
   );
