@@ -1,0 +1,11 @@
+.idea/
+.env.example
+WebPage/vite.config.js
+# en mi-web/.gitignore
+/node_modules
+/webapp/node_modules
+/webapp/.env
+/webapp/.cache
+/webapp/.vite
+dist
+WebApp/webapp/.firebase/hosting.ZGlzdA.cache
