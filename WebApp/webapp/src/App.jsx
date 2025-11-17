@@ -83,13 +83,37 @@ export default function App() {
               if (tsVal?.toDate) date = tsVal.toDate();
               else if (typeof tsVal === "string") date = new Date(tsVal);
 
+              const deviceName =
+                (DEVICE_FIELD && doc[DEVICE_FIELD]) ??
+                doc.device ??
+                doc.deviceId ??
+                doc.device_id ??
+                doc.dispositivo ??
+                doc.nombre_dispositivo ??
+                doc.nodo ??
+                null;
+
+              let pressValue = doc.presion ?? doc.press ?? null;
+              try {
+                if (typeof pressValue === "number") {
+                  const lowerPa = 900 * 100;
+                  const upperPa = 1100 * 100;
+                  if (pressValue >= lowerPa && pressValue <= upperPa) {
+                    pressValue = pressValue / 100;
+                  }
+                }
+              } catch (normErr) {
+                console.warn("No se pudo normalizar la presión", normErr);
+              }
+
               return {
                 id: d.id,
+                device: deviceName,
                 time: date.toLocaleString(),
                 ts: +date,
                 temp: doc.temperatura ?? doc.temp ?? null,
                 hum:  doc.humedad     ?? doc.hum  ?? null,
-                press:doc.presion     ?? doc.press?? null,
+                press: pressValue,
               };
             });
             setData(rows);
@@ -155,7 +179,7 @@ export default function App() {
             <MetricChart data={humSeries} yKey="hum" unit="%" min={0} max={100} />
           </ChartCard>
           <ChartCard title="Presión (hPa)">
-            <MetricChart data={pressSeries} yKey="press" unit="hPa" />
+            <MetricChart data={pressSeries} yKey="press" unit="hPa" min={900} max={1100} />
           </ChartCard>
         </div>
 
@@ -169,15 +193,17 @@ export default function App() {
                 <thead>
                   <tr>
                     <th>Fecha</th>
-                    <th style={{ textAlign: "right" }}>Temperatura</th>
-                    <th style={{ textAlign: "right" }}>Humedad</th>
-                    <th style={{ textAlign: "right" }}>Presión</th>
+                    <th style={{ textAlign: "right" }}>Grupo:</th>
+                    <th style={{ textAlign: "right" }}>Temperatura:</th>
+                    <th style={{ textAlign: "right" }}>Humedad:</th>
+                    <th style={{ textAlign: "right" }}>Presión:</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.slice().reverse().map((r) => (
                     <tr key={r.id}>
                       <td>{r.time}</td>
+                      <td style={{ textAlign: "right" }}>{r.device ?? "-"}</td>
                       <td style={{ textAlign: "right" }}>{r.temp  ?? "-"}</td>
                       <td style={{ textAlign: "right" }}>{r.hum   ?? "-"}</td>
                       <td style={{ textAlign: "right" }}>{r.press ?? "-"}</td>

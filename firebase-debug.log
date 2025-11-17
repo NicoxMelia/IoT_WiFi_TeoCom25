@@ -1,0 +1,39 @@
+[debug] [2025-11-17T15:17:18.954Z] ----------------------------------------------------------------------
+[debug] [2025-11-17T15:17:18.957Z] Command:       C:\Users\Thiaguinio\Downloads\node.exe C:\Users\nicox\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2025-11-17T15:17:18.957Z] CLI Version:   14.22.0
+[debug] [2025-11-17T15:17:18.957Z] Platform:      win32
+[debug] [2025-11-17T15:17:18.958Z] Node Version:  v22.21.0
+[debug] [2025-11-17T15:17:18.958Z] Time:          Mon Nov 17 2025 12:17:18 GMT-0300 (hora estándar de Argentina)
+[debug] [2025-11-17T15:17:18.958Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-11-17T15:17:18.960Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\Thiaguinio\Documents\GitHub\IoT_WiFi_TeoCom25
+
+Before we get started, keep in mind:
+
+  * You are currently outside your home directory
+
+[debug] [2025-11-17T15:17:19.497Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2025-11-17T15:17:19.497Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2025-11-17T15:17:58.043Z] ExitPromptError: User force closed the prompt with SIGINT
+    at Interface.sigint (C:\Users\nicox\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\@inquirer\core\dist\commonjs\lib\create-prompt.js:101:37)
+    at Interface.emit (node:events:519:28)
+    at Interface.emit (node:domain:489:12)
+    at [_ttyWrite] [as _ttyWrite] (node:internal/readline/interface:1134:18)
+    at ReadStream.onkeypress (node:internal/readline/interface:271:20)
+    at ReadStream.emit (node:events:531:35)
+    at ReadStream.emit (node:domain:489:12)
+    at emitKeys (node:internal/readline/utils:370:14)
+    at emitKeys.next (<anonymous>)
+    at ReadStream.onData (node:internal/readline/emitKeypressEvents:64:36)
+[error] 
+[error] Error: An unexpected error has occurred.
