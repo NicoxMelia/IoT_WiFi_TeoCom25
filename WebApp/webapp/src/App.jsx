@@ -18,10 +18,9 @@ const COLLECTION = "lecturas_sensores";      // Cambiá si usás otro nombre
 const TS_FIELD   = "timestamp";               // Cambiá si tu campo tiempo es "ts" o "time"
 // Opcional: si tenés varios nodos y querés filtrar por dispositivo
 const DEVICE_FIELD = "id_dispositivo";       // Cambiá/quitá si no lo usás
-const DEVICE_ID    = undefined;              // p.ej. "esp32_nodemcu_01" o dejá undefined
 
 // Arma la query según rango y filtros
-function buildQuery({ from, to, maxRows = 1000 } = {}) {
+function buildQuery({ from, to, device, maxRows = 1000 } = {}) {
   const colRef = collection(db, COLLECTION);
   const parts = [];
 
@@ -33,8 +32,8 @@ function buildQuery({ from, to, maxRows = 1000 } = {}) {
     const d1 = new Date(to); d1.setHours(23,59,59,999);
     parts.push(where(TS_FIELD, "<=", Timestamp.fromDate(d1)));
   }
-  if (DEVICE_ID) {
-    parts.push(where(DEVICE_FIELD, "==", DEVICE_ID));
+  if (DEVICE_FIELD && device && device !== "all") {
+    parts.push(where(DEVICE_FIELD, "==", device));
   }
 
   // Firestore requiere orderBy por el campo de rango
@@ -46,9 +45,14 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [range, setRange] = useState({ from: null, to: null });
+  const [deviceFilter, setDeviceFilter] = useState("all");
+  const [devices, setDevices] = useState([]);
 
   // Si usás un botón "Aplicar", podés dejarlo vacío (el efecto ya re-suscribe por rango)
   const onApply = useCallback(() => {}, []);
+  const onDeviceChange = useCallback((nextDevice) => {
+    setDeviceFilter(nextDevice);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -63,6 +67,7 @@ export default function App() {
         const q = buildQuery({
           from: range.from || undefined,
           to: range.to || undefined,
+          device: deviceFilter,
           maxRows: 1000,
         });
 
@@ -117,6 +122,15 @@ export default function App() {
               };
             });
             setData(rows);
+            setDevices((prev) => {
+              const next = new Set(prev);
+              rows.forEach((row) => {
+                if (row.device) {
+                  next.add(String(row.device));
+                }
+              });
+              return Array.from(next).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+            });
             setLoading(false);
           },
           (err) => {
@@ -138,7 +152,7 @@ export default function App() {
       mounted = false;
       if (unsub) unsub();
     };
-  }, [range.from, range.to]);
+  }, [range.from, range.to, deviceFilter]);
 
   const tempSeries  = data.map((r) => ({ time: r.time, temp:  r.temp  }));
   const humSeries   = data.map((r) => ({ time: r.time, hum:   r.hum   }));
@@ -157,6 +171,9 @@ export default function App() {
               to={range.to}
               onChange={(r) => setRange(r)}
               onApply={onApply}
+              deviceValue={deviceFilter}
+              deviceOptions={devices}
+              onDeviceChange={onDeviceChange}
             />
           </div>
 

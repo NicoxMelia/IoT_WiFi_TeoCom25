@@ -92,7 +92,7 @@ th { text-align: left; color: var(--greenFCEFyN); font-weight: 600; }
 /* Make inputs and buttons full-width on very small screens */
 @media (max-width: 420px) {
   .controls { flex-direction: column; align-items: stretch; }
-  .controls button, .controls input[type="date"] { width: 100%; }
+  .controls button, .controls input[type="date"], .controls select { width: 100%; }
   .controls > div { width: 100%; }
   .header {
   display: flex;
@@ -120,11 +120,16 @@ th { text-align: left; color: var(--greenFCEFyN); font-weight: 600; }
 .controls > div { width: 100%; min-width: 0; }
 .controls label { font-size: 16px; color: var(--greenFCEFyN); display: block; margin-bottom: 6px; font-weight: 500; }
 .controls input[type="date"] {
-  background: var(--greenFCEFyN); color: var(--text); border: 1px solid var(--greenFCEFyN); border-radius: 10px;
+  background: var(--accent); color: var(--text); border: 1px solid var(--greenFCEFyN); border-radius: 10px;
   padding: 10px 12px; outline: none; box-shadow: inset 0 0 5px var(--greenFCEFyN); width: 100%;
 }
+.controls select {
+  background: var(--accent); color: var(--text); border: 1px solid var(--greenFCEFyN); border-radius: 10px;
+  padding: 10px 12px; outline: none; box-shadow: inset 0 0 5px var(--greenFCEFyN); width: 100%;
+  appearance: none;
+}
 .controls button {
-  background: var(--greenFCEFyN); color: var(--text); border: none; padding: 10px 14px; border-radius: 10px; cursor: pointer; box-shadow: inset 0 0 5px var(--greenFCEFyN); width: 100%;
+  background: var(--accent); color: var(--text); border: none; padding: 10px 14px; border-radius: 10px; cursor: pointer; box-shadow: inset 0 0 5px var(--greenFCEFyN); width: 100%;
 }
 .controls > div:last-child { display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; }
 

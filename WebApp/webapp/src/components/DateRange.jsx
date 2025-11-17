@@ -22,6 +22,9 @@ export default function DateRange({
   minDate = new Date(2010, 0, 1),
   maxDate = new Date(),
   maxSpanDays = null,
+  deviceValue = "all",
+  deviceOptions = [],
+  onDeviceChange,
 }) {
   const minBound = normalizeToDay(minDate) ?? startOfDay(new Date(2010, 0, 1));
   const maxBound = normalizeToDay(maxDate) ?? startOfDay(new Date());
@@ -110,6 +113,7 @@ export default function DateRange({
 
   const fmt = (d) => (d ? format(d, "yyyy-MM-dd") : "");
   const spanMsg = hasSpanLimit ? `Rango máximo: ${maxSpanDays} día(s).` : null;
+  const hasDeviceFilter = Array.isArray(deviceOptions) && deviceOptions.length > 0;
 
   return (
     <div className="card">
@@ -144,6 +148,22 @@ export default function DateRange({
             onChange={handleToChange}
           />
         </div>
+        {hasDeviceFilter ? (
+          <div>
+            <label>Grupo / Dispositivo</label>
+            <select
+              value={deviceValue}
+              onChange={(event) => onDeviceChange?.(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              {deviceOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         <div>
           <button onClick={onApply}>Aplicar</button>
           {spanMsg ? (
