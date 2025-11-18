@@ -165,7 +165,7 @@ export default function DateRange({
           </div>
         ) : null}
         <div>
-          <button onClick={onApply}>Aplicar</button>
+          <button onClick={onApply}>Aplicar filtros</button>
           {spanMsg ? (
             <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>{spanMsg}</div>
           ) : null}
