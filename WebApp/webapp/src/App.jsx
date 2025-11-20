@@ -43,6 +43,16 @@ const ALERT_SETTINGS = {
   historyLimit: 200,
 };
 
+const PEER_ALERT_SETTINGS = {
+  windowMinutes: 15,
+  minPeers: 2,
+  thresholds: {
+    temp: 8,
+    hum: 25,
+    press: 18,
+  },
+};
+
 const REQUIRED_FIELDS = ["temp", "hum", "press"];
 const BATTERY_FIELDS = ["battery", "bateria", "nivel_bateria", "batteryLevel", "bateria_porcentaje"];
 
@@ -106,6 +116,19 @@ const extractDeviceNames = (rows) => {
     if (row.device) devices.add(String(row.device));
   });
   return Array.from(devices).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+};
+
+const sanitizeMetricValue = (value, limits) => {
+  if (!isNumber(value)) {
+    return { value: null, sanitized: false };
+  }
+  const outOfBounds =
+    (limits?.min !== undefined && value < limits.min) ||
+    (limits?.max !== undefined && value > limits.max);
+  if (outOfBounds) {
+    return { value: null, sanitized: true };
+  }
+  return { value, sanitized: false };
 };
 
 const detectMissingFields = (row) => {
@@ -210,7 +233,7 @@ const detectTableRangeBreaches = (row) => {
         kind: `table-${key}`,
         severity: "medium",
         title: `${label} fuera de tabla`,
-        message: `${value} está por debajo del mínimo (${min}) de la tabla`,
+        message: `${value} está por debajo del mínimo (${min}) de la tabla (omitido en las gráficas)`,
         device: row.device ?? "Dispositivo sin nombre",
         time: row.time,
         ts: row.ts,
@@ -221,12 +244,52 @@ const detectTableRangeBreaches = (row) => {
         kind: `table-${key}`,
         severity: "medium",
         title: `${label} fuera de tabla`,
-        message: `${value} supera el máximo (${max}) de la tabla`,
+        message: `${value} supera el máximo (${max}) de la tabla (omitido en las gráficas)`,
         device: row.device ?? "Dispositivo sin nombre",
         time: row.time,
         ts: row.ts,
       });
     }
+  });
+  return alerts;
+};
+
+const detectPeerDeviation = (rows) => {
+  if (!rows.length) return [];
+  const alerts = [];
+  const recentRows = rows.slice(-150);
+  const windowMs = (PEER_ALERT_SETTINGS.windowMinutes ?? 10) * 60 * 1000;
+  recentRows.forEach((row, idx) => {
+    Object.keys(METRIC_LIMITS).forEach((key) => {
+      const value = row[key];
+      if (!isNumber(value)) return;
+      const threshold = PEER_ALERT_SETTINGS.thresholds?.[key];
+      if (threshold === undefined) return;
+      const peers = [];
+      for (let i = 0; i < recentRows.length; i += 1) {
+        if (i === idx) continue;
+        const peer = recentRows[i];
+        if (!peer.device || peer.device === row.device) continue;
+        if (!isNumber(peer[key])) continue;
+        if (Math.abs(peer.ts - row.ts) <= windowMs) {
+          peers.push(peer[key]);
+        }
+      }
+      if (peers.length < (PEER_ALERT_SETTINGS.minPeers ?? 2)) return;
+      const avg = peers.reduce((sum, current) => sum + current, 0) / peers.length;
+      if (Math.abs(value - avg) >= threshold) {
+        alerts.push({
+          id: `peer-${key}-${row.id}`,
+          kind: `peer-${key}`,
+          severity: "medium",
+          title: `${METRIC_LIMITS[key]?.label ?? key} atípica`,
+          message: `${value.toFixed(1)} difiere del promedio (${avg.toFixed(1)}) de otros sensores cercanos`,
+          device: row.device ?? "Dispositivo sin nombre",
+          time: row.time,
+          ts: row.ts,
+        });
+      }
+    });
   });
   return alerts;
 };
@@ -244,6 +307,7 @@ const buildAlerts = (rows, { allowStaleCheck } = { allowStaleCheck: true }) => {
     if (lowBattery) alerts.push(lowBattery);
   });
   alerts.push(...detectStaleDevices(rows, allowStaleCheck));
+  alerts.push(...detectPeerDeviation(rows));
   return alerts
     .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
     .slice(0, ALERT_SETTINGS.historyLimit);
@@ -277,9 +341,6 @@ function buildQuery({ from, to, device, maxRows = 1000 } = {}) {
     const d1 = new Date(to);
     d1.setHours(23, 59, 59, 999);
     parts.push(where(TS_FIELD, "<=", Timestamp.fromDate(d1)));
-  }
-  if (DEVICE_FIELD && device && device !== "all") {
-    parts.push(where(DEVICE_FIELD, "==", device));
   }
 
   return query(colRef, orderBy(TS_FIELD, "asc"), ...parts, limit(maxRows));
@@ -366,12 +427,26 @@ export default function App() {
       deviceFilter === "all"
         ? rawData
         : rawData.filter((row) => String(row.device) === String(deviceFilter));
-    setData(filtered);
+    const enhanced = filtered.map((row) => {
+      const chartValues = {};
+      const sanitizedFlags = {};
+      Object.entries(METRIC_LIMITS).forEach(([key, limits]) => {
+        const { value, sanitized } = sanitizeMetricValue(row[key], limits);
+        chartValues[key] = value;
+        sanitizedFlags[key] = sanitized;
+      });
+      return {
+        ...row,
+        chartValues,
+        sanitizedFlags,
+      };
+    });
+    setData(enhanced);
   }, [deviceFilter, rawData]);
 
-  const tempSeries = data.map((r) => ({ time: r.time, temp: r.temp }));
-  const humSeries = data.map((r) => ({ time: r.time, hum: r.hum }));
-  const pressSeries = data.map((r) => ({ time: r.time, press: r.press }));
+  const tempSeries = data.map((r) => ({ time: r.time, temp: r.chartValues?.temp ?? null }));
+  const humSeries = data.map((r) => ({ time: r.time, hum: r.chartValues?.hum ?? null }));
+  const pressSeries = data.map((r) => ({ time: r.time, press: r.chartValues?.press ?? null }));
 
   return (
     <div className="page-background">
@@ -486,9 +561,30 @@ export default function App() {
                       <tr key={r.id}>
                         <td>{r.time}</td>
                         <td style={{ textAlign: "right" }}>{r.device ?? "-"}</td>
-                        <td style={{ textAlign: "right" }}>{r.temp ?? "-"}</td>
-                        <td style={{ textAlign: "right" }}>{r.hum ?? "-"}</td>
-                        <td style={{ textAlign: "right" }}>{r.press ?? "-"}</td>
+                        <td style={{ textAlign: "right" }}>
+                          {r.temp ?? "-"}
+                          {r.sanitizedFlags?.temp ? (
+                            <span className="value-flag" title="Dato descartado de las gráficas por estar fuera de rango">
+                              MOD
+                            </span>
+                          ) : null}
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          {r.hum ?? "-"}
+                          {r.sanitizedFlags?.hum ? (
+                            <span className="value-flag" title="Dato descartado de las gráficas por estar fuera de rango">
+                              MOD
+                            </span>
+                          ) : null}
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          {r.press ?? "-"}
+                          {r.sanitizedFlags?.press ? (
+                            <span className="value-flag" title="Dato descartado de las gráficas por estar fuera de rango">
+                              MOD
+                            </span>
+                          ) : null}
+                        </td>
                       </tr>
                     ))}
                 </tbody>
