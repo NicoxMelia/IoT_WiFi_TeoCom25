@@ -1,16 +1,6 @@
-# dashboard_unc
+# dashboard_teocom
 
-A new Flutter project.
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+API Key: AIzaSyBf5GVdTQWOUrUtOOWb3aC7q4uXJgkdzfU
+App ID: 1:765431657193:web:a149c2f336224c6132b678
+Messaging Sender ID: 765431657193
+Project ID: iot-wifi-tc25
