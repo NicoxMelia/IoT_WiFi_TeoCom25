@@ -356,6 +356,7 @@ export default function App() {
   const [devices, setDevices] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [showAlertHistory, setShowAlertHistory] = useState(false);
+  const [excludedDevices, setExcludedDevices] = useState([]);
 
   const onApply = useCallback(() => {}, []);
   const onDeviceChange = useCallback((nextDevice) => {
@@ -398,7 +399,6 @@ export default function App() {
               extractDeviceNames(rows).forEach((name) => merged.add(name));
               return Array.from(merged).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
             });
-            setAlerts(buildAlerts(rows, { allowStaleCheck: !range.from && !range.to }));
             setLoading(false);
           },
           (err) => {
@@ -423,10 +423,19 @@ export default function App() {
   }, [range.from, range.to, deviceFilter]);
 
   useEffect(() => {
-    const filtered =
+    const baseRows =
       deviceFilter === "all"
         ? rawData
         : rawData.filter((row) => String(row.device) === String(deviceFilter));
+
+    const exclusionSet = new Set((excludedDevices ?? []).map((name) => String(name)));
+    const filtered = exclusionSet.size
+      ? baseRows.filter((row) => {
+          if (!row.device) return true;
+          return !exclusionSet.has(String(row.device));
+        })
+      : baseRows;
+
     const enhanced = filtered.map((row) => {
       const chartValues = {};
       const sanitizedFlags = {};
@@ -442,7 +451,8 @@ export default function App() {
       };
     });
     setData(enhanced);
-  }, [deviceFilter, rawData]);
+    setAlerts(buildAlerts(enhanced, { allowStaleCheck: !range.from && !range.to }));
+  }, [deviceFilter, rawData, excludedDevices, range.from, range.to]);
 
   const tempSeries = data.map((r) => ({ time: r.time, temp: r.chartValues?.temp ?? null }));
   const humSeries = data.map((r) => ({ time: r.time, hum: r.chartValues?.hum ?? null }));
@@ -464,6 +474,8 @@ export default function App() {
               deviceValue={deviceFilter}
               deviceOptions={devices}
               onDeviceChange={onDeviceChange}
+              excludedDevices={excludedDevices}
+              onExcludedChange={(list) => setExcludedDevices(list)}
             />
           </div>
 

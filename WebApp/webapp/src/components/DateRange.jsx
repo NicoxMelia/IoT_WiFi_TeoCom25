@@ -25,6 +25,8 @@ export default function DateRange({
   deviceValue = "all",
   deviceOptions = [],
   onDeviceChange,
+  excludedDevices = [],
+  onExcludedChange,
 }) {
   const minBound = normalizeToDay(minDate) ?? startOfDay(new Date(2010, 0, 1));
   const maxBound = normalizeToDay(maxDate) ?? startOfDay(new Date());
@@ -114,6 +116,17 @@ export default function DateRange({
   const fmt = (d) => (d ? format(d, "yyyy-MM-dd") : "");
   const spanMsg = hasSpanLimit ? `Rango máximo: ${maxSpanDays} día(s).` : null;
   const hasDeviceFilter = Array.isArray(deviceOptions) && deviceOptions.length > 0;
+  const normalizedExcluded = Array.isArray(excludedDevices) ? excludedDevices : [];
+
+  const toggleExclude = (device) => {
+    const next = new Set(normalizedExcluded);
+    if (next.has(device)) {
+      next.delete(device);
+    } else {
+      next.add(device);
+    }
+    onExcludedChange?.(Array.from(next));
+  };
 
   return (
     <div className="card">
@@ -162,6 +175,24 @@ export default function DateRange({
                 </option>
               ))}
             </select>
+          </div>
+        ) : null}
+        {hasDeviceFilter ? (
+          <div className="exclude-control">
+            <label>Excluir grupos</label>
+            <div className="exclude-list">
+              {deviceOptions.map((name) => (
+                <label key={`exclude-${name}`} className="exclude-option">
+                  <input
+                    type="checkbox"
+                    checked={normalizedExcluded.includes(name)}
+                    onChange={() => toggleExclude(name)}
+                  />
+                  <span>{name}</span>
+                </label>
+              ))}
+            </div>
+            <div className="exclude-hint">Marca para ocultar lecturas de esos grupos.</div>
           </div>
         ) : null}
         <div>
