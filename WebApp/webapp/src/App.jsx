@@ -690,35 +690,6 @@ export default function App() {
           </div>
         </div>
 
-        <div className="card alert-panel">
-          <div className="alert-panel__header">
-            <div className="section-title">Alertas</div>
-            <button
-              type="button"
-              className="alert-toggle"
-              onClick={() => setShowAlertHistory((prev) => !prev)}
-            >
-              {showAlertHistory ? "Ver últimas por tipo" : "Ver historial completo"}
-            </button>
-          </div>
-          <div className="alert-feed">
-            {systemAlerts.length === 0 ? (
-              <div className="alert alert--empty">Sin alertas activas</div>
-            ) : (
-              visibleSystemAlerts.map((alert) => (
-                <div key={alert.id} className={`alert alert--${alert.severity}`}>
-                  <div className="alert__title">{alert.title}</div>
-                  <div className="alert__meta">
-                    <span>{alert.device}</span>
-                    <span>{alert.time}</span>
-                  </div>
-                  <div>{alert.message}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
         <div className="row row-3 charts">
           <ChartCard title="Temperatura (°C)">
             <MetricChart
@@ -780,6 +751,36 @@ export default function App() {
             )}
           </div>
         </div>
+
+        <div className="card alert-panel">
+          <div className="alert-panel__header">
+            <div className="section-title">Alertas</div>
+            <button
+              type="button"
+              className="alert-toggle"
+              onClick={() => setShowAlertHistory((prev) => !prev)}
+            >
+              {showAlertHistory ? "Ver últimas por tipo" : "Ver historial completo"}
+            </button>
+          </div>
+          <div className="alert-feed">
+            {systemAlerts.length === 0 ? (
+              <div className="alert alert--empty">Sin alertas activas</div>
+            ) : (
+              visibleSystemAlerts.map((alert) => (
+                <div key={alert.id} className={`alert alert--${alert.severity}`}>
+                  <div className="alert__title">{alert.title}</div>
+                  <div className="alert__meta">
+                    <span>{alert.device}</span>
+                    <span>{alert.time}</span>
+                  </div>
+                  <div>{alert.message}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
 
         <div className="card table-card">
           <div className="section-title">Últimos registros</div>
