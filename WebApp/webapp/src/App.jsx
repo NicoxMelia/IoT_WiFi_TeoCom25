@@ -61,6 +61,7 @@ const PEER_AVG_LIMITS = {
 };
 
 const CUSTOM_ALERT_STORAGE_KEY = "customAlertRules";
+const CUSTOM_ALERT_SEVERITIES = new Set(["custom", "custom-critical"]);
 
 const loadCustomAlertRules = () => {
   if (typeof window === "undefined") return [];
@@ -653,6 +654,9 @@ export default function App() {
   const avgTemp = computeAverage(data, "temp");
   const avgHum = computeAverage(data, "hum");
   const avgPress = computeAverage(data, "press");
+  const systemAlerts = alerts.filter((alert) => !CUSTOM_ALERT_SEVERITIES.has(alert.severity));
+  const alarmAlerts = alerts.filter((alert) => CUSTOM_ALERT_SEVERITIES.has(alert.severity));
+  const visibleSystemAlerts = showAlertHistory ? systemAlerts : summarizeAlerts(systemAlerts);
 
   return (
     <div className="page-background">
@@ -698,10 +702,10 @@ export default function App() {
             </button>
           </div>
           <div className="alert-feed">
-            {alerts.length === 0 ? (
+            {systemAlerts.length === 0 ? (
               <div className="alert alert--empty">Sin alertas activas</div>
             ) : (
-              (showAlertHistory ? alerts : summarizeAlerts(alerts)).map((alert) => (
+              visibleSystemAlerts.map((alert) => (
                 <div key={alert.id} className={`alert alert--${alert.severity}`}>
                   <div className="alert__title">{alert.title}</div>
                   <div className="alert__meta">
@@ -754,6 +758,28 @@ export default function App() {
           onSaveRule={handleSaveCustomRule}
           onRemoveRule={handleRemoveCustomRule}
         />
+
+        <div className="card alert-panel">
+          <div className="alert-panel__header">
+            <div className="section-title">Notificaciones de alarmas</div>
+          </div>
+          <div className="alert-feed">
+            {alarmAlerts.length === 0 ? (
+              <div className="alert alert--empty">Sin alarmas activas</div>
+            ) : (
+              alarmAlerts.map((alert) => (
+                <div key={alert.id} className={`alert alert--${alert.severity}`}>
+                  <div className="alert__title">{alert.title}</div>
+                  <div className="alert__meta">
+                    <span>{alert.device}</span>
+                    <span>{alert.time}</span>
+                  </div>
+                  <div>{alert.message}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
 
         <div className="card table-card">
           <div className="section-title">Últimos registros</div>
