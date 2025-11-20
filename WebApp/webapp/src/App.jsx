@@ -728,6 +728,7 @@ export default function App() {
           rules={customAlertRules}
           onSaveRule={handleSaveCustomRule}
           onRemoveRule={handleRemoveCustomRule}
+          metricLimits={METRIC_LIMITS}
         />
 
         <div className="card alert-panel">

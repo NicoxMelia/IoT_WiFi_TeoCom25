@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const METRIC_LABELS = {
-  temp: { label: "Temperatura", unit: "°C" },
-  hum: { label: "Humedad", unit: "%" },
-  press: { label: "Presión", unit: "hPa" },
+  temp: { label: "Temperatura", unit: "°C", placeholder: "Ej: 35" },
+  hum: { label: "Humedad", unit: "%", placeholder: "Ej: 60" },
+  press: { label: "Presión", unit: "hPa", placeholder: "Ej: 1000" },
 };
 
 const emptyForm = {
@@ -23,7 +23,13 @@ const parseNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-export default function CustomAlertPanel({ devices, rules, onSaveRule, onRemoveRule }) {
+export default function CustomAlertPanel({
+  devices,
+  rules,
+  onSaveRule,
+  onRemoveRule,
+  metricLimits = {},
+}) {
   const [form, setForm] = useState(() => ({ ...emptyForm }));
   const [error, setError] = useState(null);
 
@@ -41,13 +47,40 @@ export default function CustomAlertPanel({ devices, rules, onSaveRule, onRemoveR
   const buildMetricConfig = (metric) => {
     const target = parseNumber(form[`${metric}Target`]);
     const delta = parseNumber(form[`${metric}Delta`]);
+    const limits = metricLimits?.[metric] ?? {};
+    const meta = METRIC_LABELS[metric];
+    const unit = meta?.unit ?? "";
+
+    if (target === null) {
+      return { config: null };
+    }
+
+    if (limits.min !== undefined && target < limits.min) {
+      return { error: `El objetivo de ${meta.label} debe ser ≥ ${limits.min}${unit}` };
+    }
+    if (limits.max !== undefined && target > limits.max) {
+      return { error: `El objetivo de ${meta.label} debe ser ≤ ${limits.max}${unit}` };
+    }
+
     if (form.mode === "target") {
-      return target !== null ? { target } : null;
+      return { config: { target } };
     }
-    if (target !== null && delta !== null && delta >= 0) {
-      return { target, delta };
+
+    if (delta === null || delta < 0) {
+      return { error: `Ingresá un delta válido (≥ 0) para ${meta.label}` };
     }
-    return null;
+
+    const lowerBound = target - delta;
+    const upperBound = target + delta;
+    if ((limits.min !== undefined && lowerBound < limits.min) || (limits.max !== undefined && upperBound > limits.max)) {
+      const minText = limits.min !== undefined ? `${limits.min}${unit}` : "sin mínimo";
+      const maxText = limits.max !== undefined ? `${limits.max}${unit}` : "sin máximo";
+      return {
+        error: `Ajustá el delta para que el rango de ${meta.label} quede dentro de ${minText} y ${maxText}`,
+      };
+    }
+
+    return { config: { target, delta } };
   };
 
   const handleSubmit = (event) => {
@@ -56,12 +89,17 @@ export default function CustomAlertPanel({ devices, rules, onSaveRule, onRemoveR
       setError("Seleccioná un grupo");
       return;
     }
-    const metrics = {
-      temp: buildMetricConfig("temp"),
-      hum: buildMetricConfig("hum"),
-      press: buildMetricConfig("press"),
-    };
-    const hasMetric = Object.values(metrics).some(Boolean);
+    const metricResults = {};
+    for (const metric of Object.keys(METRIC_LABELS)) {
+      const { config, error: configError } = buildMetricConfig(metric);
+      if (configError) {
+        setError(configError);
+        return;
+      }
+      metricResults[metric] = config;
+    }
+
+    const hasMetric = Object.values(metricResults).some(Boolean);
     if (!hasMetric) {
       setError("Ingresá al menos un valor para temperatura, humedad o presión");
       return;
@@ -70,7 +108,7 @@ export default function CustomAlertPanel({ devices, rules, onSaveRule, onRemoveR
     onSaveRule?.({
       device: form.device,
       mode: form.mode,
-      metrics,
+      metrics: metricResults,
     });
     setForm((prev) => ({ ...emptyForm, device: prev.device || devices[0] || "" }));
   };
@@ -82,6 +120,7 @@ export default function CustomAlertPanel({ devices, rules, onSaveRule, onRemoveR
 
   const renderMetricInputs = (metric) => {
     const meta = METRIC_LABELS[metric];
+    const limits = metricLimits?.[metric] ?? {};
     return (
       <div key={metric} className="custom-alert__metric">
         <span>{meta.label}</span>
@@ -93,7 +132,9 @@ export default function CustomAlertPanel({ devices, rules, onSaveRule, onRemoveR
               name={`${metric}Target`}
               value={form[`${metric}Target`]}
               onChange={handleChange}
-              placeholder="Ej: 35"
+              placeholder={meta.placeholder}
+              min={limits.min ?? undefined}
+              max={limits.max ?? undefined}
             />
           </label>
           {form.mode === "delta" ? (
