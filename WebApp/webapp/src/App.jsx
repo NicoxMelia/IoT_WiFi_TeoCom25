@@ -15,6 +15,7 @@ import Header from "./components/Header";
 import DateRange from "./components/DateRange";
 import ChartCard from "./components/ChartCard";
 import MetricChart from "./components/MetricChart";
+import CustomAlertPanel from "./components/CustomAlertPanel";
 import "./App.css";
 import ornamental02 from "./assets/ornamentals/Elementos ornamentales-02recorte.png";
 
@@ -31,9 +32,9 @@ const ALERT_RULES = [
 ];
 
 const METRIC_LIMITS = {
-  temp: { min: -15, max: 60, label: "Temperatura" },
-  hum: { min: 0, max: 100, label: "Humedad" },
-  press: { min: 900, max: 1100, label: "Presión" },
+  temp: { min: -15, max: 60, label: "Temperatura", unit: "°C" },
+  hum: { min: 0, max: 100, label: "Humedad", unit: "%" },
+  press: { min: 900, max: 1100, label: "Presión", unit: "hPa" },
 };
 
 const ALERT_SETTINGS = {
@@ -57,6 +58,25 @@ const PEER_AVG_LIMITS = {
   temp: { min: METRIC_LIMITS.temp.min, max: METRIC_LIMITS.temp.max },
   hum: { min: METRIC_LIMITS.hum.min, max: METRIC_LIMITS.hum.max },
   press: { min: 930, max: 1060 },
+};
+
+const CUSTOM_ALERT_STORAGE_KEY = "customAlertRules";
+
+const loadCustomAlertRules = () => {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = window.localStorage.getItem(CUSTOM_ALERT_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (_) {
+    return [];
+  }
+};
+
+const generateRuleId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
 const REQUIRED_FIELDS = ["temp", "hum", "press"];
@@ -372,7 +392,67 @@ const detectPeerDeviation = (rows) => {
   return alerts;
 };
 
-const buildAlerts = (rows, { allowStaleCheck } = { allowStaleCheck: true }) => {
+const detectCustomAlerts = (rows, customRules = []) => {
+  if (!rows.length || !customRules.length) return [];
+  const alerts = [];
+  const metricKeys = Object.keys(METRIC_LIMITS);
+
+  customRules.forEach((rule) => {
+    if (!rule?.device) return;
+    const matchingRows = rows.filter((row) => String(row.device) === String(rule.device));
+    if (!matchingRows.length) return;
+
+    matchingRows.forEach((row) => {
+      metricKeys.forEach((key) => {
+        const cfg = rule.metrics?.[key];
+        if (!cfg) return;
+        const value = row.chartValues?.[key];
+        if (!isNumber(value)) return;
+        const label = METRIC_LIMITS[key]?.label ?? key;
+        const unit = METRIC_LIMITS[key]?.unit ?? "";
+        const deviceName = row.device ?? "Dispositivo sin nombre";
+
+        if (rule.mode === "target" && isNumber(cfg.target) && value >= cfg.target) {
+          alerts.push({
+            id: `user-${rule.id}-${key}-${row.id}`,
+            kind: `user-${rule.id}-${key}`,
+            severity: "custom",
+            title: `${label} personalizada`,
+            message: `El dispositivo ${deviceName} llegó al objetivo de ${cfg.target}${unit} (valor medido: ${formatNumberValue(value)}${unit})`,
+            device: deviceName,
+            time: row.time,
+            ts: row.ts,
+          });
+        } else if (
+          rule.mode === "delta" &&
+          isNumber(cfg.target) &&
+          isNumber(cfg.delta)
+        ) {
+          const lower = cfg.target - cfg.delta;
+          const upper = cfg.target + cfg.delta;
+          if (value < lower || value > upper) {
+            alerts.push({
+              id: `user-${rule.id}-${key}-${row.id}`,
+              kind: `user-${rule.id}-${key}`,
+              severity: "custom-critical",
+              title: `${label} personalizada`,
+              message: `El dispositivo ${deviceName} está fuera de la zona de trabajo (${cfg.target}±${cfg.delta}${unit}; valor medido: ${formatNumberValue(value)}${unit})`,
+              device: deviceName,
+              time: row.time,
+              ts: row.ts,
+            });
+          }
+        }
+      });
+    });
+  });
+  return alerts;
+};
+
+const buildAlerts = (
+  rows,
+  { allowStaleCheck, customRules } = { allowStaleCheck: true, customRules: [] }
+) => {
   if (!rows.length) return [];
   const alerts = [];
   const recentRows = rows.slice(-150);
@@ -386,23 +466,29 @@ const buildAlerts = (rows, { allowStaleCheck } = { allowStaleCheck: true }) => {
   });
   alerts.push(...detectStaleDevices(rows, allowStaleCheck));
   alerts.push(...detectPeerDeviation(rows));
+  alerts.push(...detectCustomAlerts(rows, customRules));
   return alerts
     .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
     .slice(0, ALERT_SETTINGS.historyLimit);
 };
 
 const summarizeAlerts = (alerts) => {
-  const latestByKey = new Map();
-  alerts.forEach((alert) => {
-    const deviceKey = alert.device ?? "Dispositivo sin nombre";
-    const key = `${deviceKey}|${alert.kind}`;
-    const current = latestByKey.get(key);
-    if (!current || (alert.ts ?? 0) > (current.ts ?? 0)) {
-      latestByKey.set(key, alert);
-    }
-  });
-  return Array.from(latestByKey.values())
-    .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+  if (!alerts?.length) return [];
+  const severityPriority = {
+    high: 4,
+    "custom-critical": 3,
+    medium: 2,
+    custom: 1,
+    low: 0,
+  };
+
+  return alerts
+    .slice()
+    .sort((a, b) => {
+      const priorityDiff = (severityPriority[b.severity] ?? 0) - (severityPriority[a.severity] ?? 0);
+      if (priorityDiff !== 0) return priorityDiff;
+      return (b.ts ?? 0) - (a.ts ?? 0);
+    })
     .slice(0, ALERT_SETTINGS.summaryLimit);
 };
 
@@ -435,10 +521,25 @@ export default function App() {
   const [alerts, setAlerts] = useState([]);
   const [showAlertHistory, setShowAlertHistory] = useState(false);
   const [excludedDevices, setExcludedDevices] = useState([]);
+  const [customAlertRules, setCustomAlertRules] = useState(loadCustomAlertRules);
 
   const onApply = useCallback(() => {}, []);
   const onDeviceChange = useCallback((nextDevice) => {
     setDeviceFilter(nextDevice);
+  }, []);
+
+  const handleSaveCustomRule = useCallback((rule) => {
+    setCustomAlertRules((prev) => [
+      ...prev,
+      {
+        ...rule,
+        id: generateRuleId(),
+      },
+    ]);
+  }, []);
+
+  const handleRemoveCustomRule = useCallback((ruleId) => {
+    setCustomAlertRules((prev) => prev.filter((rule) => rule.id !== ruleId));
   }, []);
 
   useEffect(() => {
@@ -501,6 +602,15 @@ export default function App() {
   }, [range.from, range.to, deviceFilter]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(CUSTOM_ALERT_STORAGE_KEY, JSON.stringify(customAlertRules));
+    } catch (_) {
+      // Ignorar problemas de almacenamiento
+    }
+  }, [customAlertRules]);
+
+  useEffect(() => {
     const baseRows =
       deviceFilter === "all"
         ? rawData
@@ -529,8 +639,13 @@ export default function App() {
       };
     });
     setData(enhanced);
-    setAlerts(buildAlerts(enhanced, { allowStaleCheck: !range.from && !range.to }));
-  }, [deviceFilter, rawData, excludedDevices, range.from, range.to]);
+    setAlerts(
+      buildAlerts(enhanced, {
+        allowStaleCheck: !range.from && !range.to,
+        customRules: customAlertRules,
+      })
+    );
+  }, [deviceFilter, rawData, excludedDevices, range.from, range.to, customAlertRules]);
 
   const tempSeries = data.map((r) => ({ time: r.time, temp: r.chartValues?.temp ?? null }));
   const humSeries = data.map((r) => ({ time: r.time, hum: r.chartValues?.hum ?? null }));
@@ -632,6 +747,13 @@ export default function App() {
             <div className="metric-average">Promedio visible: {formatAverageLabel(avgPress, "hPa")}</div>
           </ChartCard>
         </div>
+
+        <CustomAlertPanel
+          devices={devices}
+          rules={customAlertRules}
+          onSaveRule={handleSaveCustomRule}
+          onRemoveRule={handleRemoveCustomRule}
+        />
 
         <div className="card table-card">
           <div className="section-title">Últimos registros</div>
