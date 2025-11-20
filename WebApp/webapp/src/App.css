@@ -133,6 +133,13 @@
   color: #4a120d;
 }
 
+.metric-average {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: rgba(29, 64, 54, 0.85);
+  text-align: right;
+}
+
 .alert__title {
   font-weight: 600;
   margin-bottom: 2px;

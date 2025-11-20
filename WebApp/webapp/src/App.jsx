@@ -27,7 +27,7 @@ const DEVICE_FIELD = "id_dispositivo"; // Cambiá/quitá si no lo usás
 const ALERT_RULES = [
   { id: "temp-range", label: "Temperatura", field: "temp", min: -10, max: 45, severity: "high" },
   { id: "hum-range", label: "Humedad", field: "hum", min: 20, max: 90, severity: "medium" },
-  { id: "press-range", label: "Presión", field: "press", min: 930, max: 1040, severity: "medium" },
+  { id: "press-range", label: "Presión", field: "press", min: 930, max: 1060, severity: "medium" },
 ];
 
 const METRIC_LIMITS = {
@@ -51,6 +51,12 @@ const PEER_ALERT_SETTINGS = {
     hum: 25,
     press: 18,
   },
+};
+
+const PEER_AVG_LIMITS = {
+  temp: { min: METRIC_LIMITS.temp.min, max: METRIC_LIMITS.temp.max },
+  hum: { min: METRIC_LIMITS.hum.min, max: METRIC_LIMITS.hum.max },
+  press: { min: 930, max: 1060 },
 };
 
 const REQUIRED_FIELDS = ["temp", "hum", "press"];
@@ -129,6 +135,44 @@ const sanitizeMetricValue = (value, limits) => {
     return { value: null, sanitized: true };
   }
   return { value, sanitized: false };
+};
+
+const normalizeForAverage = (key, value) => {
+  if (!isNumber(value)) return value;
+  const limits = PEER_AVG_LIMITS[key];
+  if (!limits) return value;
+  const { min, max } = limits;
+  if (min !== undefined && value < min) return min;
+  if (max !== undefined && value > max) return max;
+  return value;
+};
+
+const pickComparableValue = (row, key) => {
+  const chartValue = row?.chartValues?.[key];
+  if (isNumber(chartValue)) return chartValue;
+  return null;
+};
+
+const computeAverage = (rows, key) => {
+  let sum = 0;
+  let count = 0;
+  rows.forEach((row) => {
+    const value = row?.chartValues?.[key];
+    if (!isNumber(value)) return;
+    sum += value;
+    count += 1;
+  });
+  return count ? sum / count : null;
+};
+
+const formatNumberValue = (value, digits = 1) => {
+  if (!isNumber(value)) return "-";
+  return value.toFixed(digits);
+};
+
+const formatAverageLabel = (value, unit) => {
+  if (!isNumber(value)) return "Sin datos";
+  return `${value.toFixed(1)} ${unit}`;
 };
 
 const detectMissingFields = (row) => {
@@ -259,31 +303,65 @@ const detectPeerDeviation = (rows) => {
   const alerts = [];
   const recentRows = rows.slice(-150);
   const windowMs = (PEER_ALERT_SETTINGS.windowMinutes ?? 10) * 60 * 1000;
+  const minPeers = PEER_ALERT_SETTINGS.minPeers ?? 2;
+
+  const globalStats = {};
+  Object.keys(METRIC_LIMITS).forEach((key) => {
+    let sum = 0;
+    let count = 0;
+    rows.forEach((row) => {
+      const value = pickComparableValue(row, key);
+      if (!isNumber(value)) return;
+      const normalized = normalizeForAverage(key, value);
+      if (!isNumber(normalized)) return;
+      sum += normalized;
+      count += 1;
+    });
+    if (count >= minPeers) {
+      globalStats[key] = { sum, count, avg: sum / count };
+    }
+  });
+
   recentRows.forEach((row, idx) => {
     Object.keys(METRIC_LIMITS).forEach((key) => {
-      const value = row[key];
-      if (!isNumber(value)) return;
+      const comparable = pickComparableValue(row, key);
+      if (!isNumber(comparable)) return;
+      const normalizedValue = normalizeForAverage(key, comparable);
+      if (!isNumber(normalizedValue)) return;
       const threshold = PEER_ALERT_SETTINGS.thresholds?.[key];
       if (threshold === undefined) return;
-      const peers = [];
+      const peerValues = [];
       for (let i = 0; i < recentRows.length; i += 1) {
         if (i === idx) continue;
         const peer = recentRows[i];
         if (!peer.device || peer.device === row.device) continue;
-        if (!isNumber(peer[key])) continue;
+        const peerComparable = pickComparableValue(peer, key);
+        if (!isNumber(peerComparable)) continue;
         if (Math.abs(peer.ts - row.ts) <= windowMs) {
-          peers.push(peer[key]);
+          const normalizedPeer = normalizeForAverage(key, peerComparable);
+          if (isNumber(normalizedPeer)) {
+            peerValues.push(normalizedPeer);
+          }
         }
       }
-      if (peers.length < (PEER_ALERT_SETTINGS.minPeers ?? 2)) return;
-      const avg = peers.reduce((sum, current) => sum + current, 0) / peers.length;
-      if (Math.abs(value - avg) >= threshold) {
+
+      let comparisonAvg = null;
+      if (peerValues.length >= minPeers) {
+        comparisonAvg = peerValues.reduce((sum, current) => sum + current, 0) / peerValues.length;
+      } else if (globalStats[key]) {
+        comparisonAvg = globalStats[key].avg;
+      }
+
+      if (!isNumber(comparisonAvg)) return;
+
+      if (Math.abs(normalizedValue - comparisonAvg) >= threshold) {
+        const displayValue = isNumber(row[key]) ? row[key] : comparable;
         alerts.push({
           id: `peer-${key}-${row.id}`,
           kind: `peer-${key}`,
           severity: "medium",
           title: `${METRIC_LIMITS[key]?.label ?? key} atípica`,
-          message: `${value.toFixed(1)} difiere del promedio (${avg.toFixed(1)}) de otros sensores cercanos`,
+          message: `${formatNumberValue(displayValue)} difiere del promedio (${comparisonAvg.toFixed(1)}) de otros sensores`,
           device: row.device ?? "Dispositivo sin nombre",
           time: row.time,
           ts: row.ts,
@@ -457,6 +535,9 @@ export default function App() {
   const tempSeries = data.map((r) => ({ time: r.time, temp: r.chartValues?.temp ?? null }));
   const humSeries = data.map((r) => ({ time: r.time, hum: r.chartValues?.hum ?? null }));
   const pressSeries = data.map((r) => ({ time: r.time, press: r.chartValues?.press ?? null }));
+  const avgTemp = computeAverage(data, "temp");
+  const avgHum = computeAverage(data, "hum");
+  const avgPress = computeAverage(data, "press");
 
   return (
     <div className="page-background">
@@ -528,6 +609,7 @@ export default function App() {
               min={METRIC_LIMITS.temp.min}
               max={METRIC_LIMITS.temp.max}
             />
+            <div className="metric-average">Promedio visible: {formatAverageLabel(avgTemp, "°C")}</div>
           </ChartCard>
           <ChartCard title="Humedad (%)">
             <MetricChart
@@ -537,6 +619,7 @@ export default function App() {
               min={METRIC_LIMITS.hum.min}
               max={METRIC_LIMITS.hum.max}
             />
+            <div className="metric-average">Promedio visible: {formatAverageLabel(avgHum, "%")}</div>
           </ChartCard>
           <ChartCard title="Presión (hPa)">
             <MetricChart
@@ -546,6 +629,7 @@ export default function App() {
               min={METRIC_LIMITS.press.min}
               max={METRIC_LIMITS.press.max}
             />
+            <div className="metric-average">Promedio visible: {formatAverageLabel(avgPress, "hPa")}</div>
           </ChartCard>
         </div>
 
