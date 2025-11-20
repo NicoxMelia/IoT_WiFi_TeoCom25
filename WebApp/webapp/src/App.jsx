@@ -23,7 +23,248 @@ const COLLECTION = "lecturas_sensores"; // Cambiá si usás otro nombre
 const TS_FIELD = "timestamp"; // Cambiá si tu campo tiempo es "ts" o "time"
 const DEVICE_FIELD = "id_dispositivo"; // Cambiá/quitá si no lo usás
 
-function buildQuery({ from, to, maxRows = 1000 } = {}) {
+// Umbrales por defecto para disparar alertas.
+const ALERT_RULES = [
+  { id: "temp-range", label: "Temperatura", field: "temp", min: -10, max: 45, severity: "high" },
+  { id: "hum-range", label: "Humedad", field: "hum", min: 20, max: 90, severity: "medium" },
+  { id: "press-range", label: "Presión", field: "press", min: 930, max: 1040, severity: "medium" },
+];
+
+const METRIC_LIMITS = {
+  temp: { min: -15, max: 60, label: "Temperatura" },
+  hum: { min: 0, max: 100, label: "Humedad" },
+  press: { min: 900, max: 1100, label: "Presión" },
+};
+
+const ALERT_SETTINGS = {
+  lowBatteryThreshold: 20,
+  staleDeviceMinutes: 90,
+  summaryLimit: 6,
+  historyLimit: 200,
+};
+
+const REQUIRED_FIELDS = ["temp", "hum", "press"];
+const BATTERY_FIELDS = ["battery", "bateria", "nivel_bateria", "batteryLevel", "bateria_porcentaje"];
+
+const isNumber = (value) => typeof value === "number" && !Number.isNaN(value);
+
+const parseTimestamp = (raw) => {
+  if (raw?.toDate) return raw.toDate();
+  if (typeof raw === "string" || typeof raw === "number") return new Date(raw);
+  return new Date();
+};
+
+const resolveDeviceName = (doc) =>
+  (DEVICE_FIELD && doc[DEVICE_FIELD]) ??
+  doc.device ??
+  doc.deviceId ??
+  doc.device_id ??
+  doc.dispositivo ??
+  doc.nombre_dispositivo ??
+  doc.nodo ??
+  null;
+
+const normalizePressure = (rawValue) => {
+  if (!isNumber(rawValue)) return rawValue ?? null;
+  const lowerPa = 900 * 100;
+  const upperPa = 1100 * 100;
+  if (rawValue >= lowerPa && rawValue <= upperPa) {
+    return rawValue / 100;
+  }
+  return rawValue;
+};
+
+const extractBatteryValue = (doc) => {
+  for (const field of BATTERY_FIELDS) {
+    const candidate = doc[field];
+    if (candidate === undefined || candidate === null) continue;
+    if (isNumber(candidate)) return candidate;
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
+const normalizeReading = (docSnapshot) => {
+  const doc = docSnapshot.data();
+  const date = parseTimestamp(doc[TS_FIELD]);
+  return {
+    id: docSnapshot.id,
+    device: resolveDeviceName(doc),
+    time: date.toLocaleString(),
+    ts: +date,
+    temp: doc.temperatura ?? doc.temp ?? null,
+    hum: doc.humedad ?? doc.hum ?? null,
+    press: normalizePressure(doc.presion ?? doc.press ?? null),
+    battery: extractBatteryValue(doc),
+  };
+};
+
+const extractDeviceNames = (rows) => {
+  const devices = new Set();
+  rows.forEach((row) => {
+    if (row.device) devices.add(String(row.device));
+  });
+  return Array.from(devices).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+};
+
+const detectMissingFields = (row) => {
+  const missing = REQUIRED_FIELDS.filter((field) => row[field] === null || row[field] === undefined);
+  if (missing.length === 0) return null;
+  return {
+    id: `missing-${row.id}`,
+    kind: "missing-fields",
+    severity: "medium",
+    title: "Datos incompletos",
+    message: `Campos sin valor: ${missing.join(", ")}`,
+    device: row.device ?? "Dispositivo sin nombre",
+    time: row.time,
+    ts: row.ts,
+  };
+};
+
+const detectMetricBreaches = (row) => {
+  const alerts = [];
+  ALERT_RULES.forEach((rule) => {
+    const value = row[rule.field];
+    if (!isNumber(value)) return;
+    if (rule.min !== undefined && value < rule.min) {
+      alerts.push({
+        id: `${rule.id}-low-${row.id}`,
+        kind: rule.id,
+        severity: rule.severity,
+        title: `${rule.label} baja`,
+        message: `${value} está por debajo de ${rule.min}`,
+        device: row.device ?? "Dispositivo sin nombre",
+        time: row.time,
+        ts: row.ts,
+      });
+    } else if (rule.max !== undefined && value > rule.max) {
+      alerts.push({
+        id: `${rule.id}-high-${row.id}`,
+        kind: rule.id,
+        severity: rule.severity,
+        title: `${rule.label} alta`,
+        message: `${value} supera ${rule.max}`,
+        device: row.device ?? "Dispositivo sin nombre",
+        time: row.time,
+        ts: row.ts,
+      });
+    }
+  });
+  return alerts;
+};
+
+const detectLowBattery = (row) => {
+  if (!isNumber(row.battery) || ALERT_SETTINGS.lowBatteryThreshold === null) return null;
+  if (row.battery > ALERT_SETTINGS.lowBatteryThreshold) return null;
+  return {
+    id: `battery-${row.id}`,
+    kind: "battery",
+    severity: "high",
+    title: "Batería baja",
+    message: `${row.battery}% disponible`,
+    device: row.device ?? "Dispositivo sin nombre",
+    time: row.time,
+    ts: row.ts,
+  };
+};
+
+const detectStaleDevices = (rows, allowStaleCheck) => {
+  if (!allowStaleCheck || !ALERT_SETTINGS.staleDeviceMinutes) return [];
+  const latestByDevice = new Map();
+  rows.forEach((row) => {
+    if (!row.device) return;
+    const current = latestByDevice.get(row.device);
+    if (!current || row.ts > current) {
+      latestByDevice.set(row.device, row.ts);
+    }
+  });
+  const cutoff = Date.now() - ALERT_SETTINGS.staleDeviceMinutes * 60 * 1000;
+  const alerts = [];
+  latestByDevice.forEach((ts, device) => {
+    if (ts < cutoff) {
+      alerts.push({
+        id: `stale-${device}`,
+        kind: "stale",
+        severity: "high",
+        title: "Posible sensor caído",
+        message: `Sin lecturas desde ${new Date(ts).toLocaleString()}`,
+        device,
+        time: new Date(ts).toLocaleString(),
+        ts,
+      });
+    }
+  });
+  return alerts;
+};
+
+const detectTableRangeBreaches = (row) => {
+  const alerts = [];
+  Object.entries(METRIC_LIMITS).forEach(([key, { min, max, label }]) => {
+    const value = row[key];
+    if (!isNumber(value)) return;
+    if (min !== undefined && value < min) {
+      alerts.push({
+        id: `table-${key}-low-${row.id}`,
+        kind: `table-${key}`,
+        severity: "medium",
+        title: `${label} fuera de tabla`,
+        message: `${value} está por debajo del mínimo (${min}) de la tabla`,
+        device: row.device ?? "Dispositivo sin nombre",
+        time: row.time,
+        ts: row.ts,
+      });
+    } else if (max !== undefined && value > max) {
+      alerts.push({
+        id: `table-${key}-high-${row.id}`,
+        kind: `table-${key}`,
+        severity: "medium",
+        title: `${label} fuera de tabla`,
+        message: `${value} supera el máximo (${max}) de la tabla`,
+        device: row.device ?? "Dispositivo sin nombre",
+        time: row.time,
+        ts: row.ts,
+      });
+    }
+  });
+  return alerts;
+};
+
+const buildAlerts = (rows, { allowStaleCheck } = { allowStaleCheck: true }) => {
+  if (!rows.length) return [];
+  const alerts = [];
+  const recentRows = rows.slice(-150);
+  recentRows.forEach((row) => {
+    const missing = detectMissingFields(row);
+    if (missing) alerts.push(missing);
+    alerts.push(...detectMetricBreaches(row));
+    alerts.push(...detectTableRangeBreaches(row));
+    const lowBattery = detectLowBattery(row);
+    if (lowBattery) alerts.push(lowBattery);
+  });
+  alerts.push(...detectStaleDevices(rows, allowStaleCheck));
+  return alerts
+    .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+    .slice(0, ALERT_SETTINGS.historyLimit);
+};
+
+const summarizeAlerts = (alerts) => {
+  const latestByKey = new Map();
+  alerts.forEach((alert) => {
+    const deviceKey = alert.device ?? "Dispositivo sin nombre";
+    const key = `${deviceKey}|${alert.kind}`;
+    const current = latestByKey.get(key);
+    if (!current || (alert.ts ?? 0) > (current.ts ?? 0)) {
+      latestByKey.set(key, alert);
+    }
+  });
+  return Array.from(latestByKey.values())
+    .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+    .slice(0, ALERT_SETTINGS.summaryLimit);
+};
+
+function buildQuery({ from, to, device, maxRows = 1000 } = {}) {
   const colRef = collection(db, COLLECTION);
   const parts = [];
 
@@ -37,19 +278,12 @@ function buildQuery({ from, to, maxRows = 1000 } = {}) {
     d1.setHours(23, 59, 59, 999);
     parts.push(where(TS_FIELD, "<=", Timestamp.fromDate(d1)));
   }
+  if (DEVICE_FIELD && device && device !== "all") {
+    parts.push(where(DEVICE_FIELD, "==", device));
+  }
 
   return query(colRef, orderBy(TS_FIELD, "asc"), ...parts, limit(maxRows));
 }
-
-const normalizePrimitive = (value) => {
-  if (value === "") return null;
-  return value;
-};
-
-const normalizeMeasurement = (value) => {
-  if (value === "" || value === "0" || value === 0) return null;
-  return value;
-};
 
 export default function App() {
   const [rawData, setRawData] = useState([]);
@@ -59,6 +293,8 @@ export default function App() {
   const [range, setRange] = useState({ from: null, to: null });
   const [deviceFilter, setDeviceFilter] = useState("all");
   const [devices, setDevices] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [showAlertHistory, setShowAlertHistory] = useState(false);
 
   const onApply = useCallback(() => {}, []);
   const onDeviceChange = useCallback((nextDevice) => {
@@ -82,6 +318,7 @@ export default function App() {
         const q = buildQuery({
           from: range.from || undefined,
           to: range.to || undefined,
+          device: deviceFilter,
           maxRows: 1000,
         });
 
@@ -92,62 +329,15 @@ export default function App() {
           (snap) => {
             if (!mounted) return;
 
-            const rows = snap.docs.map((d) => {
-              const doc = d.data();
-
-              let date = new Date();
-              const tsVal = doc[TS_FIELD];
-              if (tsVal?.toDate) date = tsVal.toDate();
-              else if (typeof tsVal === "string") date = new Date(tsVal);
-
-              const deviceName = normalizePrimitive(
-                (DEVICE_FIELD && doc[DEVICE_FIELD]) ??
-                  doc.device ??
-                  doc.deviceId ??
-                  doc.device_id ??
-                  doc.dispositivo ??
-                  doc.nombre_dispositivo ??
-                  doc.nodo ??
-                  null
-              );
-
-              let pressValue = normalizeMeasurement(doc.presion ?? doc.press ?? null);
-              try {
-                if (typeof pressValue === "number") {
-                  const lowerPa = 900 * 100;
-                  const upperPa = 1100 * 100;
-                  if (pressValue >= lowerPa && pressValue <= upperPa) {
-                    pressValue = pressValue / 100;
-                  }
-                }
-              } catch (normErr) {
-                console.warn("No se pudo normalizar la presión", normErr);
-              }
-
-              const tempValue = normalizeMeasurement(doc.temperatura ?? doc.temp ?? null);
-              const humValue = normalizeMeasurement(doc.humedad ?? doc.hum ?? null);
-
-              return {
-                id: d.id,
-                device: deviceName,
-                time: date.toLocaleString(),
-                ts: +date,
-                temp: tempValue,
-                hum: humValue,
-                press: pressValue,
-              };
-            });
-
-            const uniqueDevices = Array.from(
-              new Set(
-                rows
-                  .map((row) => (row.device ? String(row.device) : null))
-                  .filter(Boolean)
-              )
-            ).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+            const rows = snap.docs.map((docSnapshot) => normalizeReading(docSnapshot));
 
             setRawData(rows);
-            setDevices(uniqueDevices);
+            setDevices((prev) => {
+              const merged = new Set(prev);
+              extractDeviceNames(rows).forEach((name) => merged.add(name));
+              return Array.from(merged).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+            });
+            setAlerts(buildAlerts(rows, { allowStaleCheck: !range.from && !range.to }));
             setLoading(false);
           },
           (err) => {
@@ -169,7 +359,7 @@ export default function App() {
       mounted = false;
       if (unsub) unsub();
     };
-  }, [range.from, range.to]);
+  }, [range.from, range.to, deviceFilter]);
 
   useEffect(() => {
     const filtered =
@@ -213,15 +403,62 @@ export default function App() {
           </div>
         </div>
 
+        <div className="card alert-panel">
+          <div className="alert-panel__header">
+            <div className="section-title">Alertas</div>
+            <button
+              type="button"
+              className="alert-toggle"
+              onClick={() => setShowAlertHistory((prev) => !prev)}
+            >
+              {showAlertHistory ? "Ver últimas por tipo" : "Ver historial completo"}
+            </button>
+          </div>
+          <div className="alert-feed">
+            {alerts.length === 0 ? (
+              <div className="alert alert--empty">Sin alertas activas</div>
+            ) : (
+              (showAlertHistory ? alerts : summarizeAlerts(alerts)).map((alert) => (
+                <div key={alert.id} className={`alert alert--${alert.severity}`}>
+                  <div className="alert__title">{alert.title}</div>
+                  <div className="alert__meta">
+                    <span>{alert.device}</span>
+                    <span>{alert.time}</span>
+                  </div>
+                  <div>{alert.message}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
         <div className="row row-3 charts">
           <ChartCard title="Temperatura (°C)">
-            <MetricChart data={tempSeries} yKey="temp" unit="°C" min={-15} max={60} />
+            <MetricChart
+              data={tempSeries}
+              yKey="temp"
+              unit="°C"
+              min={METRIC_LIMITS.temp.min}
+              max={METRIC_LIMITS.temp.max}
+            />
           </ChartCard>
           <ChartCard title="Humedad (%)">
-            <MetricChart data={humSeries} yKey="hum" unit="%" min={0} max={100} />
+            <MetricChart
+              data={humSeries}
+              yKey="hum"
+              unit="%"
+              min={METRIC_LIMITS.hum.min}
+              max={METRIC_LIMITS.hum.max}
+            />
           </ChartCard>
           <ChartCard title="Presión (hPa)">
-            <MetricChart data={pressSeries} yKey="press" unit="hPa" min={900} max={1100} />
+            <MetricChart
+              data={pressSeries}
+              yKey="press"
+              unit="hPa"
+              min={METRIC_LIMITS.press.min}
+              max={METRIC_LIMITS.press.max}
+            />
           </ChartCard>
         </div>
 
