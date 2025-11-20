@@ -42,3 +42,121 @@
 .read-the-docs {
   color: #c5c3c3;
 }
+
+.alert-feed {
+  margin-top: 16px;
+  text-align: left;
+}
+
+.alert-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.alert-toggle {
+  border: 1px solid rgba(29, 64, 54, 0.4);
+  background: transparent;
+  color: var(--greenFCEFyN);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.alert-toggle:hover,
+.alert-toggle:focus-visible {
+  background: rgba(29, 64, 54, 0.1);
+  color: var(--accent);
+}
+
+.alert-feed__title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--greenFCEFyN);
+}
+
+.alert {
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(29, 64, 54, 0.2);
+  background: rgba(239, 228, 216, 0.9);
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.05);
+}
+
+.exclude-control {
+  min-width: 220px;
+}
+
+.exclude-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid rgba(29, 64, 54, 0.3);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(239, 228, 216, 0.7);
+}
+
+.exclude-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--greenFCEFyN);
+}
+
+.exclude-option input {
+  accent-color: var(--pinkFCEFyN);
+}
+
+.exclude-hint {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-top: 4px;
+}
+
+.value-flag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  background: rgba(216, 142, 119, 0.35);
+  color: #4a120d;
+}
+
+.alert__title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.alert__meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: rgba(29, 64, 54, 0.8);
+  margin-bottom: 4px;
+}
+
+.alert--high {
+  border-color: #b83221;
+  background: rgba(184, 50, 33, 0.12);
+}
+
+.alert--medium {
+  border-color: #d38129;
+  background: rgba(211, 129, 41, 0.1);
+}
+
+.alert--empty {
+  text-align: center;
+  color: rgba(29, 64, 54, 0.8);
+}

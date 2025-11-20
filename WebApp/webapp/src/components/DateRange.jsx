@@ -22,6 +22,11 @@ export default function DateRange({
   minDate = new Date(2010, 0, 1),
   maxDate = new Date(),
   maxSpanDays = null,
+  deviceValue = "all",
+  deviceOptions = [],
+  onDeviceChange,
+  excludedDevices = [],
+  onExcludedChange,
 }) {
   const minBound = normalizeToDay(minDate) ?? startOfDay(new Date(2010, 0, 1));
   const maxBound = normalizeToDay(maxDate) ?? startOfDay(new Date());
@@ -110,6 +115,18 @@ export default function DateRange({
 
   const fmt = (d) => (d ? format(d, "yyyy-MM-dd") : "");
   const spanMsg = hasSpanLimit ? `Rango máximo: ${maxSpanDays} día(s).` : null;
+  const hasDeviceFilter = Array.isArray(deviceOptions) && deviceOptions.length > 0;
+  const normalizedExcluded = Array.isArray(excludedDevices) ? excludedDevices : [];
+
+  const toggleExclude = (device) => {
+    const next = new Set(normalizedExcluded);
+    if (next.has(device)) {
+      next.delete(device);
+    } else {
+      next.add(device);
+    }
+    onExcludedChange?.(Array.from(next));
+  };
 
   return (
     <div className="card">
@@ -144,8 +161,42 @@ export default function DateRange({
             onChange={handleToChange}
           />
         </div>
+        {hasDeviceFilter ? (
+          <div>
+            <label>Grupo / Dispositivo</label>
+            <select
+              value={deviceValue}
+              onChange={(event) => onDeviceChange?.(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              {deviceOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        {hasDeviceFilter ? (
+          <div className="exclude-control">
+            <label>Excluir grupos</label>
+            <div className="exclude-list">
+              {deviceOptions.map((name) => (
+                <label key={`exclude-${name}`} className="exclude-option">
+                  <input
+                    type="checkbox"
+                    checked={normalizedExcluded.includes(name)}
+                    onChange={() => toggleExclude(name)}
+                  />
+                  <span>{name}</span>
+                </label>
+              ))}
+            </div>
+            <div className="exclude-hint">Marca para ocultar lecturas de esos grupos.</div>
+          </div>
+        ) : null}
         <div>
-          <button onClick={onApply}>Aplicar</button>
+          <button onClick={onApply}>Aplicar filtros</button>
           {spanMsg ? (
             <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>{spanMsg}</div>
           ) : null}
